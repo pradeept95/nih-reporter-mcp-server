@@ -2,7 +2,7 @@
 
 set -euo pipefail 
 
-PORT="${PORT:-8000}"
+PORT="${PORT:-8001}"
 
 exec uv run python -m uvicorn reporter.app:app \
     --host 0.0.0.0 \
