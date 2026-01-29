@@ -1,12 +1,12 @@
 from fastmcp import FastMCP
-from reporter.tools import register_tools 
+from reporter.tools import register_tools
 from reporter.prompts import register_prompts
 from starlette.responses import JSONResponse
 
 # Initialize FastMCP server
 mcp = FastMCP("reporter")
 
-# Register custom tools 
+# Register custom tools
 register_tools(mcp)
 
 # Register custom prompts
@@ -17,17 +17,16 @@ register_prompts(mcp)
 async def health_check(request):
     return JSONResponse({"status": "healthy", "service": "mcp-server"})
 
-# Create ASGI app for deployment
+
+# ASGI app for remote deployment (gunicorn/uvicorn imports this)
+# Example: gunicorn reporter.app:app
 app = mcp.http_app(stateless_http=True)
 
-# Run the server with stdio transport for local testing
-# if __name__ == "__main__":
-#     # Initialize and run the server
-#     mcp.run(transport='stdio')
 
-# Run the server with HTTP transport for external access
-# if __name__ == "__main__":
-#     mcp.run(transport="http", host="0.0.0.0", port=8000)
+if __name__ == "__main__":
+    # Running directly: use stdio for local MCP client (Claude Desktop, etc.)
+    # Remote deployments use the ASGI app above via gunicorn/uvicorn
+    mcp.run(transport="stdio")
 
 
 
