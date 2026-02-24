@@ -1,6 +1,6 @@
 from typing import List
-from reporter.utils import get_all_responses, get_initial_response, get_project_distributions
-from reporter.models import SearchParams, ProjectNum, IncludeField
+from reporter.utils import get_all_responses, get_initial_response, get_project_distributions, build_crosstab, DIMENSION_FIELDS
+from reporter.models import SearchParams, ProjectNum, IncludeField, IncludeFields
 from fastmcp import Context
 
 def register_tools(mcp):
@@ -16,7 +16,7 @@ def register_tools(mcp):
         retrieving detailed results.
 
         Args:
-            search_params (SearchParams): Search parameters including search term, years, agencies, organizations, and pi_name.
+            search_params (SearchParams): Search parameters including search term, years, agencies, organizations, pi_name, po_names, and award_types.
 
         Returns:
             dict: API response containing:
@@ -78,7 +78,7 @@ def register_tools(mcp):
         Note: This may be slower for large result sets as it pages through all results.
 
         Args:
-            search_params (SearchParams): Search parameters including search term, years, agencies, organizations, and pi_name.
+            search_params (SearchParams): Search parameters including search term, years, agencies, organizations, pi_name, po_names, and award_types.
 
         Returns:
             dict: API response containing complete statistics:
@@ -137,8 +137,8 @@ def register_tools(mcp):
         the tool will indicate this and you can help the user refine their search.
         
         Args:
-            search_params (SearchParams): Search parameters including search term, years, agencies, organizations, and pi_name.
-        
+            search_params (SearchParams): Search parameters including search term, years, agencies, organizations, pi_name, po_names, and award_types.
+
         Returns:
             dict: API response containing:
             - total_projects: Total number of matching projects in database
@@ -181,16 +181,16 @@ def register_tools(mcp):
         
     @mcp.tool()
     async def get_project_information(
-        project_ids: list[ProjectNum],
-        include_fields: List[IncludeField],
+        project_ids: list[str],
+        include_fields: List[str],
     ):
         """
         Tool to get specified metadata for a project based on project number.
         Use this to answer questions about award amounts, organizations, PIs, etc.
 
         Args:
-            project_ids (list[ProjectNum]): project ID numbers
-            include_fields (List[IncludeField]): List of fields to return from the API.
+            project_ids (list[str]): project ID numbers
+            include_fields (List[str]): List of fields to return from the API.
                 Choose fields relevant to the query (e.g., AWARD_AMOUNT for funding questions,
                 PRINCIPAL_INVESTIGATORS for PI questions, ORGANIZATION for institution questions).
 
@@ -198,13 +198,53 @@ def register_tools(mcp):
             dict: API response with specified project metadata
         """
 
-        # Convert IncludeField enums to their string values
-        field_values = [f.value for f in include_fields]
-
         # add project_ids to a search_params object
         search_params = SearchParams(
-            project_nums=project_ids
+            project_nums=[ProjectNum(project_num=p) for p in project_ids]
         )
 
+        # Validate and convert include_fields strings to IncludeField enum values
+        fields = IncludeFields(fields=include_fields)
+
         # Call the API
-        return await get_all_responses(search_params, field_values)
+        return await get_all_responses(search_params, [f.value for f in fields.fields])
+
+    @mcp.tool()
+    async def get_portfolio_crosstab(
+        ctx: Context,
+        search_params: SearchParams,
+        row_field: str,
+        col_field: str,
+    ):
+        """
+        Return a cross-tabulation of grant counts and total funding by any two project fields.
+
+        Use this to generate stacked bar charts, heatmaps, or tables comparing any two
+        dimensions of the portfolio (e.g. fiscal year x activity code, org state x funding mechanism).
+
+        Args:
+            search_params (SearchParams): Search parameters to scope the portfolio.
+            row_field (str): Field to use as rows. Valid options:
+                fiscal_year, activity_code, funding_mechanism, agency_ic_admin,
+                org_name, org_state, organization_type, award_type
+            col_field (str): Field to use as columns. Same valid options as row_field.
+
+        Returns:
+            dict: Nested dict of {row: {col: {"count": N, "total_funding": X}}}, sorted by row.
+        """
+
+        valid = list(DIMENSION_FIELDS.keys())
+        if row_field not in DIMENSION_FIELDS:
+            raise ValueError(f"Invalid row_field '{row_field}'. Valid options: {valid}")
+        if col_field not in DIMENSION_FIELDS:
+            raise ValueError(f"Invalid col_field '{col_field}'. Valid options: {valid}")
+
+        # Deduplicate include fields (org_name and org_state both map to Organization)
+        include_fields = list({
+            DIMENSION_FIELDS[row_field].value,
+            DIMENSION_FIELDS[col_field].value,
+            IncludeField.AWARD_AMOUNT.value,
+        })
+
+        all_results = await get_all_responses(search_params, include_fields)
+        return build_crosstab(all_results, row_field, col_field)
