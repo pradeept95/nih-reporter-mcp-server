@@ -1,9 +1,13 @@
 {
-	"servers": {
-		"nih-reporter-mcp-server": {
-			"url": "http://localhost:8001/mcp/",
-			"type": "http"
-		}
-	},
-	"inputs": []
+  "servers": {
+    "nih-reporter-mcp-server": {
+      "url": "http://localhost:8001/mcp/",
+      "type": "http"
+    },
+    "nih-reporter": {
+      "url": "https://nih-reporter-mcp-server-relaxed-bilby-co.app.cloud.gov/mcp",
+      "type": "http"
+    }
+  },
+  "inputs": []
 }
